@@ -25,7 +25,7 @@ def generate_mass_matrix(f, length, linear_density, etol):
     return integral_approximation*linear_density
 
 
-def generate_stiffness_matrix(f,length,axial_stiffness,dtol,etol):
+def generate_stiffness_matrix(f,length,axial_stiffness,transverse_stiffness,dtol,etol):
     # Calculate the width of each trapezoid
     n = int(round(1/etol)) #number of trapezoid
     h = (length - 0) / n
@@ -35,19 +35,35 @@ def generate_stiffness_matrix(f,length,axial_stiffness,dtol,etol):
     x_values = np.linspace(0, length, n + 1) # More efficient NumPy way
 
     # Evaluate the function at each x-value
-    y_values = [np.outer((f(x+dtol)-f(x-dtol))/(2*dtol),(f(x+dtol)-f(x-dtol))/(2*dtol)) for x in x_values]
+    if axial_stiffness != 0:
+        y_values = [np.outer(derivative(f,x,dtol),derivative(f,x,dtol)) for x in x_values]
+    #y_values_Bv = [np.outer(derivative_beam_shape_functions_num(f,x,dtol),derivative_beam_shape_functions_num(f,x,dtol)) for x in x_values]
 
     # Apply the trapezoidal rule formula:
     # Integral approx = (h/2) * [f(x0) + 2f(x1) + 2f(x2) + ... + 2f(xn-1) + f(xn)]
-    integral_sum = y_values[0] + y_values[-1]  # Add the first and last terms
+        integral_sum_Bu = y_values[0] + y_values[-1]  # Add the first and last terms
+    #integral_sum_Bv = y_values_Bv[0] + y_values_Bv[-1]  # Add the first and last terms
 
     # Add the middle terms (multiplied by 2)
-    for i in range(1, n):
-        integral_sum += 2 * y_values[i]
+        for i in range(1, n):
+            integral_sum_Bu += 2 * y_values[i]
+        #integral_sum_Bv += 2 * y_values_Bv[i]
 
-    integral_approximation = (h / 2) * integral_sum
 
-    return integral_approximation*axial_stiffness*length
+        integral_approximation = (h / 2) * integral_sum_Bu *axial_stiffness *length
+   # integral_approximation += (h/2) * integral_sum_Bv * transverse_stiffness * length**2
+
+        return integral_approximation
+    else:
+        y_values = [np.outer(derivative_beam_shape_functions_num(f,x,dtol),derivative_beam_shape_functions_num(f,x,dtol)) for x in x_values]
+        integral_sum_Bu = y_values[0] + y_values[-1]  # Add the first and last terms
+        for i in range(1, n):
+            integral_sum_Bu += 2 * y_values[i]
+        #integral_sum_Bv += 2 * y_values_Bv[i]
+
+
+        integral_approximation = (h / 2) * integral_sum_Bu *transverse_stiffness *length
+        return integral_approximation
 
 """code here"""
 def delete_degrees_of_freedom_from_matrix(matrix,deleted_degrees_of_freedom):
@@ -57,6 +73,7 @@ def delete_degrees_of_freedom_from_matrix(matrix,deleted_degrees_of_freedom):
         return(matrix)
     else:
         print('Invalid indices provided')
+
 def rotation_matrix_2d(angle):
     return np.array([
         [np.cos(angle), -np.sin(angle)],
@@ -77,8 +94,8 @@ def reorder_matrix(original_matrix,reordering_of_the_degrees_of_freedom):
 
 """code here"""
 
-def derivative(f,x,tol):
-    return (f(x+tol)-f(x-tol))/(2*tol)
+def derivative(f,x,dtol):
+    return (f(x+dtol)-f(x-dtol))/(2*dtol)
 
 from typing import Union
 
@@ -159,6 +176,27 @@ def assemble_global_matrix(
 
     return global_matrix
 
+def bar_shape_functions(longitudinal_coordinate):
+        length = 2
+        xi = longitudinal_coordinate/length
+        f1 = 1 - xi
+        f2 = xi
+        return np.array([f1, f2])
+
+def beam_shape_functions(longitudinal_coordinate):
+    length = 2
+    xi = longitudinal_coordinate/length
+    f1 = 1 - 3*xi**2 + 2*xi**3
+    f2 = length * xi * (1-xi)**2
+    f3 = xi**2 * (3-2*xi)
+    f4 = length * xi**2 * (xi-1)
+    return np.array([f1, f2, f3, f4])
+
+def derivative_beam_shape_functions_num(f,x,dtol):
+    # or you can write the first derivatives yourself by hand
+    return (f(x + dtol) - 2 * f(x) + f(x - dtol)) / (dtol**2)
+    
+
 
 
 
@@ -168,7 +206,9 @@ class BarBeamElement(object):
                 coordinates_second_end: tuple[float, float], # (x2, y2)
                 linear_density: float, # rho*A
                 axial_stiffness: float, # E*A/L
-                transverse_stiffness: float): #E*I/L
+                transverse_stiffness: float,
+                etol: float,
+                dtol: float): #E*I/L
         
         """
         The degrees of freedom are the displacements of the nodes in the global frame of reference
@@ -177,16 +217,36 @@ class BarBeamElement(object):
         where I refers to the first end and II to the second end
         the x and y are the horizontal and vertical displacements in the global frame of reference
         """
-        pass
+        self.coordinates_first_end = np.array(coordinates_first_end)
+        self.coordinates_second_end = np.array(coordinates_second_end)
+        self.linear_density = linear_density
+        self.axial_stiffness = axial_stiffness
+        self.transverse_stiffness = transverse_stiffness
+        self.length = np.linalg.norm(self.coordinates_second_end-self.coordinates_first_end)
+        self.etol = etol
+        self.dtol = dtol
 
     def generate_structural_mass_matrix(self):
         """
         Outputs the 6x6 mass matrix of the Bar+Beam element.
         """
-        pass
-        
+        M_bar = generate_mass_matrix(bar_shape_functions,self.length,self.linear_density,self.etol)
+        M_beam = generate_mass_matrix(beam_shape_functions, self.length, self.linear_density, self.etol)
+        self.structural_mass_matrix = np.zeros((6,6))
+        loc_array_bar = np.array([0,3])
+        loc_array_beam = np.array([1,2,4,5])
+        self.structural_mass_matrix = assemble_global_matrix(6,[(M_bar,loc_array_bar),(M_beam,loc_array_beam)])
+        return self.structural_mass_matrix
+    
     def generate_structural_stiffness_matrix(self):
         """
         Outputs the 6x6 stiffness matrix of the Bar+Beam element.
         """
-        pass
+    
+        K_bar = generate_stiffness_matrix(bar_shape_functions,self.length,self.axial_stiffness,0,self.dtol,self.etol)
+        K_beam = generate_stiffness_matrix(beam_shape_functions, self.length, 0, self.transverse_stiffness,self.dtol, self.etol)
+        self.structural_stiffness_matrix = np.zeros((6,6))
+        loc_array_bar = np.array([0,3])
+        loc_array_beam = np.array([1,2,4,5])
+        self.structural_stiffness_matrix = assemble_global_matrix(6,[(K_bar,loc_array_bar),(K_beam,loc_array_beam)])
+        return self.structural_stiffness_matrix
