@@ -250,3 +250,166 @@ class BarBeamElement(object):
         loc_array_beam = np.array([1,2,4,5])
         self.structural_stiffness_matrix = assemble_global_matrix(6,[(K_bar,loc_array_bar),(K_beam,loc_array_beam)])
         return self.structural_stiffness_matrix
+    
+
+
+def assembly_struss_structure(area_cross_section,
+length1,
+length2,
+moment_of_area,
+Youngs_modulus,
+spring_stiffness,
+linear_density):
+    #Define each element
+    element1 = BarBeamElement(coordinates_first_end=(0,0),
+                              coordinates_second_end=(length1,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element2 = BarBeamElement(coordinates_first_end=(length1,0),
+                              coordinates_second_end=(length1,length2),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element3 = BarBeamElement(coordinates_first_end=(length1,length2),
+                              coordinates_second_end=(length1*2,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element4 = BarBeamElement(coordinates_first_end=(length1,0),
+                              coordinates_second_end=(length1*2,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element5 = BarBeamElement(coordinates_first_end=(length1,length2),
+                              coordinates_second_end=(length1*2,length2*2),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element6 = BarBeamElement(coordinates_first_end=(length1*2,length2*2),
+                              coordinates_second_end=(length1*2,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element7 = BarBeamElement(coordinates_first_end=(length1*2,0),
+                              coordinates_second_end=(length1*3,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element8 = BarBeamElement(coordinates_first_end=(length1*2,0),
+                              coordinates_second_end=(length1*3,length2),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element9 = BarBeamElement(coordinates_first_end=(length1*2,length2*2),
+                              coordinates_second_end=(length1*3,length2),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element10 = BarBeamElement(coordinates_first_end=(length1*3,length2),
+                              coordinates_second_end=(length1*3,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element11 = BarBeamElement(coordinates_first_end=(length1*3,0),
+                              coordinates_second_end=(length1*4,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    element12 = BarBeamElement(coordinates_first_end=(length1*3,length2),
+                              coordinates_second_end=(length1*4,0),
+                              linear_density=linear_density,
+                              axial_stiffness=Youngs_modulus*area_cross_section/length1,
+                              transverse_stiffness=Youngs_modulus*moment_of_area/length1,
+                              etol=1e-5,
+                              dtol=1e-5)
+    spring = BarBeamElement(coordinates_first_end=(0,0),
+                            coordinates_second_end=(length1,0),
+                            linear_density=0,
+                            axial_stiffness=spring_stiffness,
+                            transverse_stiffness=0,
+                            etol=1e-5,
+                            dtol=1e-5)
+    #Create mass and stiffness matrices
+    M1 = element1.generate_structural_mass_matrix()
+    K1 = element1.generate_structural_stiffness_matrix()
+    M2 = element2.generate_structural_mass_matrix()
+    K2 = element2.generate_structural_stiffness_matrix()
+    M3 = element3.generate_structural_mass_matrix()
+    K3 = element3.generate_structural_stiffness_matrix()
+    M4 = element4.generate_structural_mass_matrix()
+    K4 = element4.generate_structural_stiffness_matrix()
+    M5 = element5.generate_structural_mass_matrix()
+    K5 = element5.generate_structural_stiffness_matrix()
+    M6 = element6.generate_structural_mass_matrix()
+    K6 = element6.generate_structural_stiffness_matrix()
+    M7 = element7.generate_structural_mass_matrix()
+    K7 = element7.generate_structural_stiffness_matrix()
+    M8 = element8.generate_structural_mass_matrix()
+    K8 = element8.generate_structural_stiffness_matrix()
+    M9 = element9.generate_structural_mass_matrix()
+    K9 = element9.generate_structural_stiffness_matrix()
+    M10 = element10.generate_structural_mass_matrix()
+    K10 = element10.generate_structural_stiffness_matrix()
+    M11 = element11.generate_structural_mass_matrix()
+    K11 = element11.generate_structural_stiffness_matrix()
+    M12 = element12.generate_structural_mass_matrix()
+    K12 = element12.generate_structural_stiffness_matrix()
+    K_spring = spring.generate_structural_stiffness_matrix()
+
+    total_DOF = 25
+    loc_array_1 = np.array([0,1,2,6,7,8])
+    loc_array_2 = np.array([3,4,5,6,7,24])
+    loc_array_3 = np.array([6,7,25,9,10,11])
+    loc_array_4 = np.array([3,4,5,9,10,11])
+    loc_array_5 = np.array([6,7,26,12,13,14])
+    loc_array_6 = np.array([9,10,11,12,13,14])
+    loc_array_7 = np.array([9,10,11,15,16,17])
+    loc_array_8 = np.array([9,10,11,18,19,20])
+    loc_array_9 = np.array([12,13,14,18,19,20])
+    loc_array_10 = np.array([15,16,17,18,19,20])
+    loc_array_11 = np.array([15,16,17,21,22,23])
+    loc_array_12 = np.array([18,19,20,21,22,27])
+    loc_array_spring = np.array([0,3])
+
+    K = assemble_global_matrix(total_DOF,[(K1,loc_array_1),
+                                          (K2,loc_array_2),
+                                          (K3,loc_array_3),
+                                          (K4,loc_array_4),
+                                          (K5,loc_array_5),
+                                          (K6,loc_array_6),
+                                          (K7,loc_array_7),
+                                          (K8,loc_array_8),
+                                          (K9,loc_array_9),
+                                          (K10,loc_array_10),
+                                          (K11,loc_array_11),
+                                          (K12,loc_array_12),
+                                          (K_spring,loc_array_spring)])
+
+    return delete_degrees_of_freedom_from_matrix(K,np.array([0,1,2,5,11,14,17,20,22]))
+
+    
+    #K_global = np.zeros((total_DOF,total_DOF))
+

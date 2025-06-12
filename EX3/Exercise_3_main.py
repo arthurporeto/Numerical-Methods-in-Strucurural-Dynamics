@@ -29,6 +29,13 @@ def main():
     print(Element.generate_structural_mass_matrix(), '\n')
     print(Element.generate_structural_stiffness_matrix())
 
+    print(assembly_struss_structure(area_cross_section=10,
+length1=400,
+length2=300,
+moment_of_area=100,
+Youngs_modulus=100000,
+spring_stiffness=10000,
+linear_density=1e-3))
 
     
 if __name__ == "__main__":
