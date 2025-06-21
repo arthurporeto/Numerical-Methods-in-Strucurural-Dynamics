@@ -43,7 +43,7 @@ def main():
         2: (length1, 0),
         3: (length1, length2),
         4: (2 * length1, 0),
-        5: (2 * length1, 2 * length2), # Corrected based on likely pattern
+        5: (2 * length1, 2 * length2), 
         6: (3 * length1, 0),
         7: (3 * length1, length2),
         8: (4 * length1, 0)

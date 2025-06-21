@@ -4,13 +4,13 @@ def generate_mass_matrix(f, length, linear_density, etol):
     # Calculate the width of each trapezoid
     n = int(round(1/etol)) #number of trapezoid
     h = (length - 0) / n
-
+    f_length = lambda coord: f(coord, length=length)
     # Generate the x-values for each point
     # x_values = [a + i * h for i in range(n + 1)] # List comprehension way
     x_values = np.linspace(0, length, n + 1) # More efficient NumPy way
 
     # Evaluate the function at each x-value
-    y_values = [np.outer(f(x),f(x)) for x in x_values]
+    y_values = [np.outer(f_length(x),f_length(x)) for x in x_values]
 
     # Apply the trapezoidal rule formula:
     # Integral approx = (h/2) * [f(x0) + 2f(x1) + 2f(x2) + ... + 2f(xn-1) + f(xn)]
@@ -29,6 +29,7 @@ def generate_stiffness_matrix(f,length,axial_stiffness,transverse_stiffness,dtol
     # Calculate the width of each trapezoid
     n = int(round(1/etol)) #number of trapezoid
     h = (length - 0) / n
+    f_length = lambda coord: f(coord, length=length)
 
     # Generate the x-values for each point
     # x_values = [a + i * h for i in range(n + 1)] # List comprehension way
@@ -36,7 +37,7 @@ def generate_stiffness_matrix(f,length,axial_stiffness,transverse_stiffness,dtol
 
     # Evaluate the function at each x-value
     if axial_stiffness != 0:
-        y_values = [np.outer(derivative(f,x,dtol),derivative(f,x,dtol)) for x in x_values]
+        y_values = [np.outer(derivative(f_length,x,dtol),derivative(f_length,x,dtol)) for x in x_values]
     #y_values_Bv = [np.outer(derivative_beam_shape_functions_num(f,x,dtol),derivative_beam_shape_functions_num(f,x,dtol)) for x in x_values]
 
     # Apply the trapezoidal rule formula:
@@ -55,7 +56,7 @@ def generate_stiffness_matrix(f,length,axial_stiffness,transverse_stiffness,dtol
 
         return integral_approximation
     else:
-        y_values = [np.outer(derivative_beam_shape_functions_num(f,x,dtol),derivative_beam_shape_functions_num(f,x,dtol)) for x in x_values]
+        y_values = [np.outer(derivative_beam_shape_functions_num(f_length,x,dtol),derivative_beam_shape_functions_num(f_length,x,dtol)) for x in x_values]
         integral_sum_Bu = y_values[0] + y_values[-1]  # Add the first and last terms
         for i in range(1, n):
             integral_sum_Bu += 2 * y_values[i]
@@ -162,9 +163,9 @@ def assemble_global_matrix(
 
         # Validate shapes
         n = element_matrix.shape[0]
-        print(f'n:{n}')
-        print(f'N:{N}')
-        print(f'localization_array:{localization_array}')
+        #print(f'n:{n}')
+        #print(f'N:{N}')
+        #print(f'localization_array:{localization_array}')
         if element_matrix.shape[0] != element_matrix.shape[1]:
             raise ValueError("Element matrix must be square.")
         if localization_array.shape[0] != n:
@@ -179,15 +180,15 @@ def assemble_global_matrix(
 
     return global_matrix
 
-def bar_shape_functions(longitudinal_coordinate):
-        length = 2
+def bar_shape_functions(longitudinal_coordinate,length):
+        #length = 2
         xi = longitudinal_coordinate/length
         f1 = 1 - xi
         f2 = xi
         return np.array([f1, f2])
 
-def beam_shape_functions(longitudinal_coordinate):
-    length = 2
+def beam_shape_functions(longitudinal_coordinate,length):
+    #length = 2
     xi = longitudinal_coordinate/length
     f1 = 1 - 3*xi**2 + 2*xi**3
     f2 = length * xi * (1-xi)**2
@@ -272,7 +273,7 @@ class Struss_Structure(object):
                  area_cross_section,
                  moment_of_area,
                  Youngs_modulus,
-                 linear_density, #rho
+                 linear_density, #rho*A
                  springs_stiffness, #{spring_1: spring_stiffness}
                  etol: float,
                  dtol: float):
@@ -306,26 +307,6 @@ class Struss_Structure(object):
                 moment_of_area = self.moment_of_area[key]
                 Youngs_modulus = self.Youngs_modulus[key]
             
-
-                '''
-            if key == "Spring":
-                
-                element = BarBeamElement(first_node_coordinates, # (x1, y1)
-                second_node_coordinates, # (x2, y2)
-                0, # rho*A
-                self.spring_stiffness, # E*A/L
-                0,
-                self.etol,
-                self.dtol)
-                K = element.generate_structural_stiffness_matrix()
-                M = element.generate_structural_mass_matrix()
-                
-
-                self.K_matrices.append(K)
-                self.M_matrices.append(M)
-
-            else:
-            '''
                 element = BarBeamElement(first_node_coordinates, # (x1, y1)
                     second_node_coordinates, # (x2, y2)
                     linear_density, # rho*A
@@ -359,6 +340,9 @@ class Struss_Structure(object):
         #print(f'input_assemble_M[-1]:{input_assemble_M[-1]}')
         K_total = assemble_global_matrix(max_DOF,input_assemble_K)
         M_total = assemble_global_matrix(max_DOF,input_assemble_M)
+
+        print(f'K_total with all DOF:{K_total}')
+        print(f'M_total with all DOF:{M_total}')
 
         K_total = delete_degrees_of_freedom_from_matrix(K_total,self.constrained_dof)
         M_total = delete_degrees_of_freedom_from_matrix(M_total,self.constrained_dof)
