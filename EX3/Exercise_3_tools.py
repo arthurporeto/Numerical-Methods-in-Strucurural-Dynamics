@@ -95,6 +95,43 @@ def reorder_matrix(original_matrix,reordering_of_the_degrees_of_freedom):
 
 """code here"""
 
+def rotation_matrix_bar_beam_2d(angle_radians: float) -> np.ndarray:
+    """
+    Generates the 6x6 rotation (transformation) matrix for a 2D bar-beam element.
+    This matrix transforms global displacements/forces to local displacements/forces
+    (or vice-versa when transposed).
+
+    Args:
+        angle_radians (float): The angle (in radians) of the element's local x'-axis
+                                (from node 1 to node 2) with respect to the global X-axis.
+
+    Returns:
+        np.ndarray: A 6x6 NumPy array representing the rotation matrix.
+                    Order of DOFs: (ux1, uy1, rz1, ux2, uy2, rz2)
+    """
+    cos_a = np.cos(angle_radians)
+    sin_a = np.sin(angle_radians)
+
+    # Initialize a 6x6 zero matrix
+    R = np.zeros((6, 6))
+
+    # Fill the blocks for translational DOFs
+    R[0, 0] = cos_a
+    R[0, 1] = sin_a
+    R[1, 0] = -sin_a
+    R[1, 1] = cos_a
+
+    R[3, 3] = cos_a
+    R[3, 4] = sin_a
+    R[4, 3] = -sin_a
+    R[4, 4] = cos_a
+
+    # Fill the blocks for rotational DOFs (rotations are the same in local/global)
+    R[2, 2] = 1
+    R[5, 5] = 1
+
+    return R
+
 def derivative(f,x,dtol):
     return (f(x+dtol)-f(x-dtol))/(2*dtol)
 
@@ -316,15 +353,25 @@ class Struss_Structure(object):
                     self.dtol)
                 K = element.generate_structural_stiffness_matrix()
                 M = element.generate_structural_mass_matrix()
-                self.K_matrices.append(K)
-                self.M_matrices.append(M)
+                delta_x = second_node_coordinates[0] - first_node_coordinates[0]
+                delta_y = second_node_coordinates[1] - first_node_coordinates[1]
+
+                # Use np.arctan2 for robust angle calculation
+                # This will give the angle in radians, from -pi to +pi
+                angle = np.arctan2(delta_y, delta_x)
+
+                #angle = np.arctan((second_node_coordinates[1]-first_node_coordinates[1])/(second_node_coordinates[0]-first_node_coordinates[0]))
+                K_rotation = rotation_matrix_bar_beam_2d(angle).T@K@rotation_matrix_bar_beam_2d(angle)
+                M_rotation = rotation_matrix_bar_beam_2d(angle).T@M@rotation_matrix_bar_beam_2d(angle)
+                self.K_matrices.append(K_rotation)
+                self.M_matrices.append(M_rotation)
         for index, (key,value) in enumerate(self.springs_stiffness.items()):
             #print(f'key:{key}')
             #print(f'self.springs_stiffess[key]:{self.springs_stiffness[key]}')
             K_spring, M_spring = spring_matrices(self.springs_stiffness[key])
             self.K_matrices.append(K_spring)
             self.M_matrices.append(M_spring)
-        print(f'self.M_matrices:{self.M_matrices}')
+        #print(f'self.M_matrices:{self.M_matrices}')
         #print(f'shape(self.K_matrices:{np.shape(self.K_matrices)}')
         max_DOFs = []
         for key,value in self.DOF.items():
@@ -341,13 +388,13 @@ class Struss_Structure(object):
         K_total = assemble_global_matrix(max_DOF,input_assemble_K)
         M_total = assemble_global_matrix(max_DOF,input_assemble_M)
 
-        print(f'K_total with all DOF:{K_total}')
-        print(f'M_total with all DOF:{M_total}')
+        #print(f'K_total with all DOF:{K_total}')
+        #print(f'M_total with all DOF:{M_total}')
 
-        K_total = delete_degrees_of_freedom_from_matrix(K_total,self.constrained_dof)
-        M_total = delete_degrees_of_freedom_from_matrix(M_total,self.constrained_dof)
+        K_total_modified = delete_degrees_of_freedom_from_matrix(K_total,self.constrained_dof)
+        M_total_modified = delete_degrees_of_freedom_from_matrix(M_total,self.constrained_dof)
 
-        return K_total, M_total
+        return K_total, M_total, K_total_modified,M_total_modified
 
             
         

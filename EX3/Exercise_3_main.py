@@ -81,7 +81,7 @@ def main():
         constrained_dof=np.array([0,1,22]),
         area_cross_section=area_cross_section,moment_of_area=moment_of_area,Youngs_modulus=Youngs_modulus,springs_stiffness=spring_stiffness,linear_density=linear_density,etol=1e-5,dtol=1e-5)
 
-    K_total, M_total = structure.assembly()
+    K_total, M_total,K_total_mod,M_total_mod = structure.assembly()
     np.set_printoptions(
     precision=2,   # Display up to 2 decimal places (or significant figures in scientific notation)
     suppress=True, # Suppress printing of small floating point values (very close to zero)
@@ -89,7 +89,7 @@ def main():
     linewidth=150
                                                # 8 total width, 2 decimal places for exponent
     )
-    print(f'K_total:{np.round(K_total,2)}')
-    print(f'M_total:{np.round(M_total,2)}')
+    print(f'K_total:{np.round(K_total_mod,2)}')
+    print(f'M_total:{np.round(M_total_mod,2)}')
 if __name__ == "__main__":
     main()
