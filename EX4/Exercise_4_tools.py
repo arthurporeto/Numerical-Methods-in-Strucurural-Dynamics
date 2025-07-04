@@ -7,7 +7,8 @@ sys.path.append(ex3_dir)
 from Exercise_3_tools import *
 import numpy as np
 import scipy.linalg
-
+import matplotlib.pyplot as plt
+'''
 #Getting the structure from previous exercise
 area_cross_section = {1: 10, 2: 10, 3: 10,4:10,5:10,6:10,7:10,8:10,9:10,10:10,11:10,12:10}
 length1 = 400
@@ -60,7 +61,8 @@ degrees_of_freedom = {
 structure = Struss_Structure(nodes = Nodes,lines = LINES,DOF=degrees_of_freedom, constrained_dof=np.array([0,1,22]),
     area_cross_section=area_cross_section,moment_of_area=moment_of_area,Youngs_modulus=Youngs_modulus,springs_stiffness=spring_stiffness,linear_density=linear_density,etol=1e-5,dtol=1e-5)
 
-K_total, M_total = structure.assembly()
+K_total, M_total,K_total_modified,M_total_modified = structure.assembly()
+'''
 
 #we want to solve Ku=f
 def solve_lu_scipy(A: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -107,11 +109,15 @@ def solve_lu_scipy(A: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 
-def solve_static(pressure_load, #constant force per unit length acting in the transverse direction of member 12.
+def solve_static(K,
+                 K_mod,
+                 constrained_DOF,
+                 Nodes,
+        pressure_load, #constant force per unit length acting in the transverse direction of member 12.
                  force_load2, #concentrated force acting downward on node 5
-                 force_load3): #return two arrays: displacement and reaction forces
-    n = np.shape(K_total[0])
-    f = np.zeros((28,1))
+                 force_load3): #return two arrays: displacement and reaction forces on constrained nodes
+    n = np.shape(K)[0]
+    f = np.zeros((n,1))
     f[13] =force_load2
     f[7] = force_load3
     # Get coordinates for Node 7 and Node 8
@@ -191,16 +197,111 @@ def solve_static(pressure_load, #constant force per unit length acting in the tr
     f[22] += global_fixed_end_forces[4] # Node 8, uy
     f[27] += global_fixed_end_forces[5] # Node 8, rz
 
-    f = np.delete(f,[0,1,22])
+    #f = np.reshape(1,-1)
+
+    f_reduced = np.delete(f,constrained_DOF)
+
     #np.delete(f,1)
     #np.delete(f,22)
 
-    u = solve_lu_scipy(K_total,f)
+    u = solve_lu_scipy(K_mod,f_reduced)
 
-    return  u #displacements = solve_lu_scipy(K,f) #displacements
+    u_full = np.zeros(n)
+    all_dof_indices = np.arange(n)
+    # Find the indices that are NOT constrained
+    unconstrained_dof_indices = np.setdiff1d(all_dof_indices, constrained_DOF)
+    u_full[unconstrained_dof_indices] = u
+
+    #u_full = np.insert(u,[0,0,22],[0,0,0])
+
+    all_forces_in_equilibrium = K@u_full
+
+    #print(f'all forces in equilibrium:{all_forces_in_equilibrium}')
+    #print(f'f:{f}')
+    #print(f'{f[constrained_DOF]}')
+
+    #f = f.reshape(1,-1)
+
+    #f.reshape(1,-1)
+    reaction_forces = all_forces_in_equilibrium[constrained_DOF] - f[constrained_DOF] #already for the constrained DOFs
+    reaction_forces = np.array([reaction_forces[0,0],reaction_forces[1,1],reaction_forces[2,2]])
+
+
+    #reactions_constrained_DOF = np.array([reaction_forces[0],reaction_forces[1],reaction_forces[22]])
+    #reactions_constrained_DOF = reaction_forces[constrained_DOF]
+
+    return  -u_full,-reaction_forces #displacements = solve_lu_scipy(K,f) #displacements
     #reactions = np.zeros(3,1)
 
 
+def plot_deformations(structure,u_full,node_map,scale_factor):
+    
+   # Calculate deformed coordinates for each node
+    deformed_nodes_coords = {}
+    fig, ax = plt.subplots(figsize=(12, 9)) # Adjust figure size as needed
+    for index, (key,value) in enumerate(structure.nodes.items()):
+        # Get displacement components from U_full
+        # Ensure that node_dof_map_for_plotting correctly provides the ux and uy indices for each node_id
+        dx = u_full[node_map[key]['ux']]
+        dy = u_full[node_map[key]['uy']]
+        
+        deformed_coords = (value[0] + dx, value[1] + dy)
+        deformed_nodes_coords[key] = deformed_coords
+        
+        # Plot original nodes (black circles)
+        ax.plot(value[0], value[1], 'ko', markersize=6, alpha=0.7)
+        # Plot deformed nodes (red circles)
+        ax.plot(deformed_coords[0], deformed_coords[1], 'ro', markersize=6, alpha=0.7)
+        
+        # Add node labels (offset slightly)
+        ax.text(value[0], value[1] + 20, str(key), color='black', fontsize=9)
+        ax.text(deformed_coords[0] + 20, deformed_coords[1] + 20, str(key), color='red', fontsize=9)
 
-u = solve_static(pressure_load=0.01,force_load2=-60,force_load3=-40)
-print(u)   
+    print(f'deformed_nodes_coord:{deformed_nodes_coords}')
+    print(f'deformed_coord:{deformed_coords}')
+    # Plot original and deformed elements (lines)
+    plotted_original_element_label = False
+    plotted_deformed_element_label = False
+    plotted_original_spring_label = False
+    plotted_deformed_spring_label = False
+
+    for element_id, node_pair in structure.lines.items():
+        node1_id, node2_id = node_pair
+        
+        # Get original coordinates
+        orig_x1, orig_y1 = structure.nodes[node1_id]
+        orig_x2, orig_y2 = structure.nodes[node2_id]
+
+        # Get deformed coordinates
+        def_x1, def_y1 = deformed_nodes_coords[node1_id]
+        def_x2, def_y2 = deformed_nodes_coords[node2_id]
+        
+        # Plot original elements
+        if element_id == 'spring_1':
+            ax.plot([orig_x1, orig_x2], [orig_y1, orig_y2], 'b:', linewidth=1,
+                    label='Original Spring' if not plotted_original_spring_label else "")
+            plotted_original_spring_label = True
+        else:
+            ax.plot([orig_x1, orig_x2], [orig_y1, orig_y2], 'k:', linewidth=1,
+                    label='Original Element' if not plotted_original_element_label else "")
+            plotted_original_element_label = True
+        
+        # Plot deformed elements
+        if element_id == 'spring_1':
+            ax.plot([def_x1, def_x2], [def_y1, def_y2], 'b-', linewidth=1,
+                    label='Deformed Spring' if not plotted_deformed_spring_label else "")
+            plotted_deformed_spring_label = True
+        else:
+            ax.plot([def_x1, def_x2], [def_y1, def_y2], 'r-', linewidth=1,
+                    label='Deformed Element' if not plotted_deformed_element_label else "")
+            plotted_deformed_element_label = True
+
+    ax.set_aspect('equal', adjustable='box') # Maintain aspect ratio
+    ax.set_xlabel('Global X-coordinate')
+    ax.set_ylabel('Global Y-coordinate')
+    ax.set_title('Deformed vs. Undeformed Structure')
+    ax.grid(True)
+    ax.legend(loc='best')
+    plt.show()
+    
+

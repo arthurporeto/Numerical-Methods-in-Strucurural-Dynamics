@@ -1,35 +1,10 @@
-from Exercise_3_tools import *
+from Exercise_4_tools import *
 
 def main():
-    length = 2
-    linear_density = 10 # rho*A
-    axial_stiffness = 1000 # E*A/L
-    transverse_stiffness = 1 # E*I/L
-
-    # bar matrices
-    print(generate_mass_matrix(bar_shape_functions, length, linear_density, 1e-5), '\n')
-    #print(derivative_beam_shape_functions_num(beam_shape_functions,1,1e-5))
-    print(generate_stiffness_matrix(bar_shape_functions, length, axial_stiffness,0, 1e-5, 1e-5), '\n')
-
-    # beam matrices
-    print(generate_mass_matrix(beam_shape_functions, length, linear_density, 1e-5), '\n')
-    print(generate_stiffness_matrix(beam_shape_functions, length,0, transverse_stiffness, 1e-5, 1e-5),'\n')
-
-    Element = BarBeamElement(
-    coordinates_first_end=(0,0), 
-    coordinates_second_end=(2,0), 
-    linear_density=10, # rho*A
-    axial_stiffness=1000, # E*A/L
-    transverse_stiffness=1, # E*I/L
-    etol=1e-5,
-    dtol=1e-5 #equality tolerance
-    )
-
-
-    print(Element.generate_structural_mass_matrix(), '\n')
-    print(Element.generate_structural_stiffness_matrix())
-
-
+    pressure_load=0.01
+    force_load2=-60
+    force_load3=-40
+    #Getting the structure from previous exercise
     area_cross_section = {1: 10, 2: 10, 3: 10,4:10,5:10,6:10,7:10,8:10,9:10,10:10,11:10,12:10}
     length1 = 400
     length2 = 300
@@ -37,8 +12,7 @@ def main():
     Youngs_modulus = {1: 100000, 2: 100000, 3: 100000,4:100000,5:100000,6:100000,7:100000,8:100000,9:100000,10:100000,11:100000,12:100000}
     spring_stiffness = {'spring_1':10000}
     linear_density = {1: 1e-3, 2: 1e-3, 3: 1e-3,4:1e-3,5:1e-3,6:1e-3,7:1e-3,8:1e-3,9:1e-3,10:1e-3,11:1e-3,12:1e-3}
-
-    structure = Struss_Structure(nodes = {
+    Nodes = {
         1: (0, 0),
         2: (length1, 0),
         3: (length1, length2),
@@ -47,8 +21,8 @@ def main():
         6: (3 * length1, 0),
         7: (3 * length1, length2),
         8: (4 * length1, 0)
-    },
-    lines = {
+    }
+    LINES = {
         1: (1, 3),
         2: (2, 3),
         3: (3, 4),
@@ -62,8 +36,8 @@ def main():
         11: (6, 8),
         12: (7, 8),
         'spring_1': (1, 2)
-    },
-    DOF={
+    }
+    degrees_of_freedom = {
         1: (0, 1, 2, 6, 7, 8),
         2: (3, 4, 5, 6, 7, 24),
         3: (6, 7, 25, 9, 10, 11),
@@ -77,19 +51,39 @@ def main():
         10: (15, 16, 17, 18, 19, 20),
         11: (15, 16, 17, 21, 22, 23),
         12: (18, 19, 20, 21, 22, 27),
-        'spring_1': (0, 3)},
-        constrained_dof=np.array([0,1,22]),
+        'spring_1': (0, 3)}
+    
+    node_map = {
+        1: {'ux': 0, 'uy': 1},
+        2: {'ux': 3, 'uy': 4},
+        3: {'ux': 6, 'uy': 7},
+        4: {'ux': 9, 'uy': 10},
+        5: {'ux': 12, 'uy': 13},
+        6: {'ux': 15, 'uy': 16},
+        7: {'ux': 18, 'uy': 19},
+        8: {'ux': 21, 'uy': 22}
+    }
+
+    structure = Struss_Structure(nodes = Nodes,lines = LINES,DOF=degrees_of_freedom, constrained_dof=np.array([0,1,22]),
         area_cross_section=area_cross_section,moment_of_area=moment_of_area,Youngs_modulus=Youngs_modulus,springs_stiffness=spring_stiffness,linear_density=linear_density,etol=1e-5,dtol=1e-5)
 
-    K_total, M_total,K_total_mod,M_total_mod = structure.assembly()
-    np.set_printoptions(
-    precision=2,   # Display up to 2 decimal places (or significant figures in scientific notation)
-    suppress=True, # Suppress printing of small floating point values (very close to zero)
-                   # to zero. This makes numbers like 1e-18 show as 0.0.
-    linewidth=150
-                                               # 8 total width, 2 decimal places for exponent
-    )
-    print(f'K_total_modified:{np.round(K_total_mod,2)}')
-    print(f'M_total_modified:{np.round(M_total_mod,2)}')
+    K_total, M_total,K_total_modified,M_total_modified = structure.assembly()
+
+    u,reactions = solve_static(K_total,K_total_modified,constrained_DOF=np.array([0,1,22]),Nodes=Nodes,pressure_load=0.01,force_load2=-60,force_load3=-40)
+    
+
+    plot_deformations(structure=structure,u_full=u,node_map=node_map,scale_factor=200)
+
+
+    np.set_printoptions(precision=5,    # Show up to 5 digits after decimal point for float numbers
+    suppress=True,  # Suppress small numbers to 0
+    linewidth=80    # Adjust this value to control line breaks.
+                    # 80 is a common default, try larger/smaller to fit your console.
+)
+    print(f'displacements:{u}')
+    print(f'reactions:{reactions}')
+
+    return K_total
+
 if __name__ == "__main__":
     main()
