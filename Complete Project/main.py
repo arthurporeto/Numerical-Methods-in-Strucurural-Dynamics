@@ -93,13 +93,16 @@ def main():
 
     K_total, M_total,K_total_modified,M_total_modified = structure.assembly()
 
+    print(f'K:{K_total_modified}','\n')
+    print(f'M:{M_total_modified}','\n')
+
     u,reactions = structure.solve_static(force_load2=-60,force_load3=-40,pressure_load=0.01)
 
     print(f'displacements:{u}')
     print(f'reactions:{reactions}')
     
 
-    structure.plot_deformations(scale_factor=200)
+    structure.plot_deformations(scale_factor=100)
 
 
     np.set_printoptions(precision=5,    # Show up to 5 digits after decimal point for float numbers

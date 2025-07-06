@@ -221,32 +221,43 @@ class StrussStructure(object):
         return  self.u_full,self.reaction_forces #displacements = solve_lu_scipy(K,f) #displacements
         #reactions = np.zeros(3,1)
 
-    def plot_deformations(self,scale_factor):
-    
-   # Calculate deformed coordinates for each node
+    def plot_deformations(self, scale_factor, num_points_on_beam=50):
+        """
+        Plots the undeformed and statically deformed states of the structure,
+        accurately showing beam deformation curves and applying a scale factor.
+
+        Args:
+            scale_factor (float): Factor to magnify displacements for visualization. Default is 1.0.
+            num_points_on_beam (int): Number of intermediate points to plot along each beam's length.
+        """
+        if self.u_full is None:
+            raise ValueError("Displacements (self.u_full) must be calculated first. Call solve_static() first.")
+
+        fig, ax = plt.subplots(figsize=(12, 9))
+        ax.set_aspect('equal', adjustable='box')
+        ax.set_xlabel('Global X-coordinate')
+        ax.set_ylabel('Global Y-coordinate')
+        ax.set_title(f'Deformed vs. Undeformed Structure (Static Load, Scale Factor: {scale_factor:.0f}x)')
+        ax.grid(True)
+
+        # Calculate deformed coordinates for node markers
         deformed_nodes_coords = {}
-        fig, ax = plt.subplots(figsize=(12, 9)) # Adjust figure size as needed
-        for index, (key,value) in enumerate(self.nodes.items()):
-            # Get displacement components from U_full
-            # Ensure that node_dof_map_for_plotting correctly provides the ux and uy indices for each node_id
-            dx = self.u_full[self.node_map[key]['ux']]
-            dy = self.u_full[self.node_map[key]['uy']]
-            
-            deformed_coords = (value[0] + dx, value[1] + dy)
-            deformed_nodes_coords[key] = deformed_coords
+        for node_id, coords in self.nodes.items():
+            dx_global = self.u_full[self.node_map[node_id]['ux']] * scale_factor
+            dy_global = self.u_full[self.node_map[node_id]['uy']] * scale_factor
+            deformed_nodes_coords[node_id] = (coords[0] + dx_global, coords[1] + dy_global)
             
             # Plot original nodes (black circles)
-            ax.plot(value[0], value[1], 'ko', markersize=6, alpha=0.7)
+            ax.plot(coords[0], coords[1], 'ko', markersize=6, alpha=0.7)
             # Plot deformed nodes (red circles)
-            ax.plot(deformed_coords[0], deformed_coords[1], 'ro', markersize=6, alpha=0.7)
+            ax.plot(deformed_nodes_coords[node_id][0], deformed_nodes_coords[node_id][1], 'ro', markersize=6, alpha=0.7)
             
-            # Add node labels (offset slightly)
-            ax.text(value[0], value[1] + 20, str(key), color='black', fontsize=9)
-            ax.text(deformed_coords[0] + 20, deformed_coords[1] + 20, str(key), color='red', fontsize=9)
+            # Add node labels
+            ax.text(coords[0] - 50, coords[1] + 50, str(node_id), color='black', fontsize=9)
+            ax.text(deformed_nodes_coords[node_id][0] + 50, deformed_nodes_coords[node_id][1] + 50, str(node_id) + "'", color='red', fontsize=9)
 
-        #print(f'deformed_nodes_coord:{deformed_nodes_coords}')
-        #print(f'deformed_coord:{deformed_coords}')
-        # Plot original and deformed elements (lines)
+
+        # Plot original and deformed elements
         plotted_original_element_label = False
         plotted_deformed_element_label = False
         plotted_original_spring_label = False
@@ -255,38 +266,92 @@ class StrussStructure(object):
         for element_id, node_pair in self.lines.items():
             node1_id, node2_id = node_pair
             
-            # Get original coordinates
             orig_x1, orig_y1 = self.nodes[node1_id]
             orig_x2, orig_y2 = self.nodes[node2_id]
 
-            # Get deformed coordinates
-            def_x1, def_y1 = deformed_nodes_coords[node1_id]
-            def_x2, def_y2 = deformed_nodes_coords[node2_id]
+            # Get element properties (length and angle) for shape function evaluation
+            delta_x_orig = orig_x2 - orig_x1
+            delta_y_orig = orig_y2 - orig_y1
+            element_length = np.linalg.norm(np.array([delta_x_orig, delta_y_orig]))
             
-            # Plot original elements
+            if element_length == 0: # Skip if zero length
+                continue
+
+            angle_radians = np.arctan2(delta_y_orig, delta_x_orig)
+            
+            # Plot original element (straight line)
             if element_id == 'spring_1':
-                ax.plot([orig_x1, orig_x2], [orig_y1, orig_y2], 'b:', linewidth=1,
-                        label='Original Spring' if not plotted_original_spring_label else "")
+                ax.plot([orig_x1, orig_x2], [orig_y1, orig_y2], 'b:', linewidth=1.5,
+                        label='Original Spring' if not plotted_original_spring_label else "_nolegend_")
                 plotted_original_spring_label = True
             else:
                 ax.plot([orig_x1, orig_x2], [orig_y1, orig_y2], 'k:', linewidth=1,
-                        label='Original Element' if not plotted_original_element_label else "")
+                        label='Original Element' if not plotted_original_element_label else "_nolegend_")
                 plotted_original_element_label = True
             
-            # Plot deformed elements
+            # Plot deformed element (curve for Bar+Beam, line for Spring)
             if element_id == 'spring_1':
-                ax.plot([def_x1, def_x2], [def_y1, def_y2], 'b-', linewidth=1,
-                        label='Deformed Spring' if not plotted_deformed_spring_label else "")
+                # Springs deform axially, so still a straight line between deformed nodes
+                def_x1, def_y1 = deformed_nodes_coords[node1_id]
+                def_x2, def_y2 = deformed_nodes_coords[node2_id]
+                ax.plot([def_x1, def_x2], [def_y1, def_y2], 'b-', linewidth=2,
+                        label='Deformed Spring' if not plotted_deformed_spring_label else "_nolegend_")
                 plotted_deformed_spring_label = True
-            else:
-                ax.plot([def_x1, def_x2], [def_y1, def_y2], 'r-', linewidth=1,
-                        label='Deformed Element' if not plotted_deformed_element_label else "")
+            else: # This is a Bar+Beam element, plot its curved deformation based on shape functions
+                # 1. Get global nodal displacements for this element (6 DOFs)
+                element_global_dof_indices = list(self.DOF[element_id]) # Get global DOF indices for this element
+                global_element_displacements = self.u_full[element_global_dof_indices]
+
+                # 2. Transform global nodal displacements to local nodal displacements
+                R_6x6 = rotation_matrix_bar_beam_2d(angle_radians)
+                local_element_displacements = R_6x6 @ global_element_displacements
+
+                # Extract local nodal ux, uy, rz for both nodes
+                u1_local = local_element_displacements[0]
+                v1_local = local_element_displacements[1]
+                theta1_local = local_element_displacements[2]
+                u2_local = local_element_displacements[3]
+                v2_local = local_element_displacements[4]
+                theta2_local = local_element_displacements[5]
+
+                # 3. Generate intermediate points along the element's local x'-axis
+                x_prime_points = np.linspace(0, element_length, num_points_on_beam)
+
+                # 4. Calculate local axial (u') and transverse (v') displacements at these points
+                u_prime_path = np.zeros(num_points_on_beam)
+                v_prime_path = np.zeros(num_points_on_beam)
+
+                for i, x_prime in enumerate(x_prime_points):
+                    # Axial displacement from bar shape functions
+                    N_u_at_x_prime = bar_shape_functions(x_prime, element_length) # N1_u, N2_u
+                    u_prime_path[i] = N_u_at_x_prime[0] * u1_local + N_u_at_x_prime[1] * u2_local
+
+                    # Transverse displacement from beam shape functions
+                    N_v_at_x_prime_scaled = beam_shape_functions(x_prime, element_length) # N1_v, N2_v*L, N3_v, N4_v*L
+                    v_prime_path[i] = (N_v_at_x_prime_scaled[0] * v1_local +
+                                       N_v_at_x_prime_scaled[1] * theta1_local +
+                                       N_v_at_x_prime_scaled[2] * v2_local +
+                                       N_v_at_x_prime_scaled[3] * theta2_local)
+
+                # 5. Transform local deformed points (x' + u', v') back to global coordinates
+                #    using the element's original position and angle, and applying scale_factor.
+                orig_node1_x, orig_node1_y = self.nodes[node1_id]
+
+                # Current local position (x', y'=0) plus local displacement
+                deformed_local_x_prime = x_prime_points + u_prime_path * scale_factor
+                deformed_local_y_prime = v_prime_path * scale_factor
+
+                # Rotate these points back to global and translate by original node1 position
+                global_deformed_x = orig_node1_x + deformed_local_x_prime * np.cos(angle_radians) - deformed_local_y_prime * np.sin(angle_radians)
+                global_deformed_y = orig_node1_y + deformed_local_x_prime * np.sin(angle_radians) + deformed_local_y_prime * np.cos(angle_radians)
+
+                # Plot the deformed path for the current element
+                ax.plot(global_deformed_x, global_deformed_y, 'r-', linewidth=2,
+                        label='Deformed Element' if not plotted_deformed_element_label else "_nolegend_")
                 plotted_deformed_element_label = True
 
-        ax.set_aspect('equal', adjustable='box') # Maintain aspect ratio
-        ax.set_xlabel('Global X-coordinate')
-        ax.set_ylabel('Global Y-coordinate')
-        ax.set_title('Deformed vs. Undeformed Structure')
-        ax.grid(True)
         ax.legend(loc='best')
         plt.show()
+
+    def eigensolver(self):
+        pass
