@@ -67,6 +67,12 @@ def main():
         8: {'ux': 21, 'uy': 22}
     }
 
+    np.set_printoptions(precision=5,    # Show up to 5 digits after decimal point for float numbers
+    suppress=True,  # Suppress small numbers to 0
+    linewidth=120    # Adjust this value to control line breaks.
+                    
+    )   
+
     # bar matrices
     print(generate_mass_matrix(bar_shape_functions, length=2, linear_density=10, etol=1e-5), '\n')
     print(generate_stiffness_matrix(bar_shape_functions, length=2, axial_stiffness=1000,transverse_stiffness=0, dtol=1e-5, etol=1e-5), '\n')
@@ -88,7 +94,7 @@ def main():
     print(element.generate_structural_mass_matrix(), '\n')
     print(element.generate_structural_stiffness_matrix(),'\n')
 
-    structure = StrussStructure(nodes = Nodes,lines = LINES,DOF=degrees_of_freedom, constrained_dof=np.array([0,1,22]),node_map=node_map,
+    structure = StrussStructure(max_DOF=28,nodes = Nodes,lines = LINES,DOF=degrees_of_freedom, constrained_dof=np.array([0,1,22]),node_map=node_map,
         area_cross_section=area_cross_section,moment_of_area=moment_of_area,Youngs_modulus=Youngs_modulus,springs_stiffness=spring_stiffness,linear_density=linear_density,etol=1e-5,dtol=1e-5)
 
     K_total, M_total,K_total_modified,M_total_modified = structure.assembly()
@@ -105,14 +111,11 @@ def main():
     structure.plot_deformations(scale_factor=100)
 
 
-    np.set_printoptions(precision=5,    # Show up to 5 digits after decimal point for float numbers
-    suppress=True,  # Suppress small numbers to 0
-    linewidth=80    # Adjust this value to control line breaks.
-                    # 80 is a common default, try larger/smaller to fit your console.
-)
    
+   
+    structure.eigensolver(mode_number=0,scale_factor=30)
 
-    return K_total
+    plt.show()
 
 if __name__ == "__main__":
     main()

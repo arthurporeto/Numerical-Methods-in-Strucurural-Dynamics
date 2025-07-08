@@ -3,9 +3,11 @@ import matplotlib.pyplot as plt
 import scipy.linalg
 from barBeamElement import BarBeamElement
 from tools import *
+from matplotlib.lines import Line2D
 
 class StrussStructure(object):
     def __init__(self,
+                 max_DOF,
                  nodes,
                  lines,
                  DOF,
@@ -18,6 +20,7 @@ class StrussStructure(object):
                  springs_stiffness, #{spring_1: spring_stiffness}
                  etol: float,
                  dtol: float):
+        self.max_DOF=max_DOF
         self.nodes = nodes #nodes = {1: (0,0), 2: (length,0)}
         self.lines = lines #lines = {1: (1,3),'spring': (1,2)}
         self.DOF = DOF
@@ -92,6 +95,8 @@ class StrussStructure(object):
         #print(f'input_assemble_M[-1]:{input_assemble_M[-1]}')
         self.K_total = assemble_global_matrix(max_DOF,input_assemble_K)
         self.M_total = assemble_global_matrix(max_DOF,input_assemble_M)
+
+        
 
         #print(f'K_total with all DOF:{K_total}')
         #print(f'M_total with all DOF:{M_total}')
@@ -351,7 +356,106 @@ class StrussStructure(object):
                 plotted_deformed_element_label = True
 
         ax.legend(loc='best')
-        plt.show()
+        #plt.show()
 
-    def eigensolver(self):
-        pass
+    def eigensolver(self, mode_number, scale_factor, num_points_on_beam=50):
+        """
+        Calculates and plots a specified eigenmode, clearly showing the undeformed
+        structure versus the deformed mode shape.
+
+        Args:
+            mode_number (int): The index of the eigenmode to plot (0 for the first mode).
+            scale_factor (float): A scaling factor to amplify the mode shape for visualization.
+            num_points_on_beam (int): The number of points for rendering beam curves.
+        """
+        # --- 1. Eigenvalue Problem Solution ---
+        eigenvalues, eigenvectors_reduced = scipy.linalg.eigh(self.K_total_modified, self.M_total_modified)
+        print(eigenvalues)
+        natural_frequencies_rad_s = np.sqrt(np.maximum(eigenvalues, 0))
+
+        sort_indices = np.argsort(natural_frequencies_rad_s)
+        sorted_natural_frequencies = natural_frequencies_rad_s[sort_indices]
+        sorted_mode_shapes_reduced = eigenvectors_reduced[:, sort_indices]
+
+        if mode_number >= len(sorted_natural_frequencies):
+            raise ValueError(f"Mode number {mode_number} is out of bounds. There are {len(sorted_natural_frequencies)} modes.")
+        
+        selected_frequency_rad_s = sorted_natural_frequencies[mode_number]
+        selected_mode_shape_reduced = sorted_mode_shapes_reduced[:, mode_number]
+
+        mode_shape_full = np.zeros(self.max_DOF)
+        unconstrained_dof_indices = np.setdiff1d(np.arange(self.max_DOF), self.constrained_dof)
+        mode_shape_full[unconstrained_dof_indices] = selected_mode_shape_reduced
+
+        # --- 2. Plotting Setup ---
+        fig, ax = plt.subplots(figsize=(13, 10))
+        ax.set_aspect('equal', adjustable='box')
+        frequency_hz = selected_frequency_rad_s / (2 * np.pi)
+        ax.set_title(f'Eigenmode {mode_number + 1} | Natural Frequency: {selected_frequency_rad_s:.3f} rad/s (Scale: {scale_factor:.0f}x)')
+        ax.grid(True)
+
+        # --- 3. Plot Undeformed and Deformed Structures ---
+        deformed_nodes_coords_mode = {}
+        for node_id, coords in self.nodes.items():
+            # Calculate deformed coordinates
+            dx = mode_shape_full[self.node_map[node_id]['ux']] * scale_factor
+            dy = mode_shape_full[self.node_map[node_id]['uy']] * scale_factor
+            deformed_nodes_coords_mode[node_id] = (coords[0] + dx, coords[1] + dy)
+            # Plot original node
+            ax.plot(coords[0], coords[1], 'ko', markersize=6, alpha=0.6)
+
+        for element_id, node_pair in self.lines.items():
+            node1_id, node2_id = node_pair
+            orig_x1, orig_y1 = self.nodes[node1_id]
+            orig_x2, orig_y2 = self.nodes[node2_id]
+            
+            # Plot original element outline
+            ax.plot([orig_x1, orig_x2], [orig_y1, orig_y2], 'k:', linewidth=1.5, alpha=0.8)
+
+            # Plot deformed element shape
+            if 'spring' in str(element_id):
+                def_x1, def_y1 = deformed_nodes_coords_mode[node1_id]
+                def_x2, def_y2 = deformed_nodes_coords_mode[node2_id]
+                ax.plot([def_x1, def_x2], [def_y1, def_y2], 'b-', linewidth=2.5)
+            else:
+                element_length = np.linalg.norm(np.array([orig_x2-orig_x1, orig_y2-orig_y1]))
+                if element_length == 0: continue
+                angle_radians = np.arctan2(orig_y2-orig_y1, orig_x2-orig_x1)
+                
+                element_global_dof_indices = list(self.DOF[element_id])
+                global_element_displacements = mode_shape_full[element_global_dof_indices]
+
+                R_6x6 = rotation_matrix_bar_beam_2d(angle_radians)
+                local_displacements = R_6x6 @ global_element_displacements
+                u1, v1, th1, u2, v2, th2 = local_displacements
+
+                x_prime = np.linspace(0, element_length, num_points_on_beam)
+                u_prime = np.zeros_like(x_prime)
+                v_prime = np.zeros_like(x_prime)
+
+                for i, xp in enumerate(x_prime):
+                    N_u = bar_shape_functions(xp, element_length)
+                    u_prime[i] = N_u[0] * u1 + N_u[1] * u2
+                    N_v = beam_shape_functions(xp, element_length)
+                    v_prime[i] = N_v[0] * v1 + N_v[1] * th1 + N_v[2] * v2 + N_v[3] * th2
+                
+                deformed_local_x = x_prime + u_prime * scale_factor
+                deformed_local_y = v_prime * scale_factor
+                
+                cos_a, sin_a = np.cos(angle_radians), np.sin(angle_radians)
+                global_def_x = orig_x1 + deformed_local_x * cos_a - deformed_local_y * sin_a
+                global_def_y = orig_y1 + deformed_local_x * sin_a + deformed_local_y * cos_a
+                
+                ax.plot(global_def_x, global_def_y, 'r-', linewidth=2.5)
+
+        # --- 4. Create a Clear Legend ---
+        legend_handles = [
+            Line2D([0], [0], color='k', linestyle=':', linewidth=1.5, label='Undeformed Structure'),
+            Line2D([0], [0], color='k', marker='o', markersize=6, linestyle='None', label='Undeformed Node'),
+            Line2D([0], [0], color='r', linestyle='-', linewidth=2.5, label='Deformed Beam (Mode Shape)'),
+            Line2D([0], [0], color='b', linestyle='-', linewidth=2.5, label='Deformed Spring (Mode Shape)')
+        ]
+        ax.legend(handles=legend_handles, loc='best')
+        ax.set_xlabel('Global X-coordinate')
+        ax.set_ylabel('Global Y-coordinate')
+        #plt.show()
